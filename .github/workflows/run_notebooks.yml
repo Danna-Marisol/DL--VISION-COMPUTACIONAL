@@ -1,0 +1,302 @@
+name: Run ML Notebooks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  run-notebooks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.8'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install tensorflow matplotlib pandas scikit-learn mlflow gdown pyngrok
+        
+    - name: Run Notebook 1 - Data Preparation
+      run: |
+        python -c "
+        notebook1 = '''# NOTEBOOK 1
+!pip install gdown --quiet
+!pip install mlflow scikit-learn pyngrok --quiet
+
+import os
+import gdown
+import zipfile
+import random
+import matplotlib.pyplot as plt
+import pandas as pd
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.callbacks import ModelCheckpoint
+import mlflow
+from pyngrok import ngrok
+from sklearn.metrics import accuracy_score, f1_score
+import numpy as np
+
+# Configurar semillas para reproducibilidad
+SEED = 42
+tf.random.set_seed(SEED)
+np.random.seed(SEED)
+random.seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+
+# Descargar y preparar dataset
+file_id_train = '1N1cLDx1jACfSt7lqO5gnQ--7f6rXOiLs'
+file_id_test = '1mHE56atoeuUlkZjBR24dVtmhrN18dpoO'
+output_train = 'train.zip'
+output_test = 'test.zip'
+
+if not os.path.exists('train'):
+    print("Descargando train.zip...")
+    gdown.download(id=file_id_train, output=output_train, quiet=False)
+    with zipfile.ZipFile(output_train, 'r') as zip_ref:
+        zip_ref.extractall('train')
+
+if not os.path.exists('test'):
+    print("Descargando test.zip...")
+    gdown.download(id=file_id_test, output=output_test, quiet=False)
+    with zipfile.ZipFile(output_test, 'r') as zip_ref:
+        zip_ref.extractall('test')
+
+# Cargar datasets
+ds_train_ = tf.keras.preprocessing.image_dataset_from_directory(
+    'train',
+    labels='inferred',
+    label_mode='binary',
+    image_size=(64, 64),
+    interpolation='nearest',
+    batch_size=64,
+    shuffle=True,
+)
+
+ds_valid_ = tf.keras.preprocessing.image_dataset_from_directory(
+    'test',
+    labels='inferred',
+    label_mode='binary',
+    image_size=(64, 64),
+    interpolation='nearest',
+    batch_size=64,
+    shuffle=False,
+)
+
+# Preprocesamiento de datos
+def convert_to_float(image, label):
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+    return image, label
+
+AUTOTUNE = tf.data.AUTOTUNE
+
+ds_train = (
+    ds_train_
+    .map(convert_to_float)
+    .cache()
+    .prefetch(buffer_size=AUTOTUNE)
+)
+
+ds_valid = (
+    ds_valid_
+    .map(convert_to_float)
+    .cache()
+    .prefetch(buffer_size=AUTOTUNE)
+)
+
+# Guardar datasets preprocesados para usar en los siguientes notebooks
+tf.data.experimental.save(ds_train, 'preprocessed_train')
+tf.data.experimental.save(ds_valid, 'preprocessed_valid')'''  # Insertar aquí el contenido completo del Notebook 1
+        exec(notebook1)
+        "
+        
+    - name: Run Notebook 2 - Model Training
+      run: |
+        python -c "
+        notebook2 = '''# NOTEBOOK 2
+import os
+import mlflow
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.callbacks import ModelCheckpoint
+from sklearn.metrics import accuracy_score, f1_score
+import numpy as np
+
+# Cargar datasets preprocesados
+ds_train = tf.data.experimental.load('preprocessed_train')
+ds_valid = tf.data.experimental.load('preprocessed_valid')
+
+# Ciclo de entrenamiento
+N_RUNS = 5
+accuracies = []
+f1_scores = []
+best_val_acc = 0
+best_history = None
+mlflow.set_experiment("clasificacion_perros_y_gatos")
+
+for run in range(N_RUNS):
+    print(f"\nEjecutando corrida {run+1}/{N_RUNS}")
+    
+    # Definir modelo con data augmentation
+    data_augmentation = keras.Sequential([
+        layers.RandomFlip("horizontal_and_vertical", seed=42),
+        layers.RandomRotation(0.3, seed=42),
+        layers.RandomZoom(0.2, seed=42),
+        layers.RandomContrast(0.2, seed=42),
+    ])
+
+    # Definir modelo optimizado
+    model = keras.Sequential([
+        keras.Input(shape=(64, 64, 3)),
+        data_augmentation,
+        layers.Conv2D(32, 3, activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.MaxPool2D(),
+        layers.Dropout(0.5),
+        layers.Conv2D(64, 3, activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.MaxPool2D(),
+        layers.Dropout(0.5),
+        layers.Conv2D(128, 3, activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.Conv2D(128, 3, activation='relu', padding='same'),
+        layers.BatchNormalization(),
+        layers.MaxPool2D(),
+        layers.Dropout(0.5),
+        layers.Flatten(),
+        layers.Dense(64, activation='relu'),
+        layers.Dropout(0.5),
+        layers.Dense(1, activation='sigmoid'),
+    ])
+    
+    # Compilar modelo
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(epsilon=0.01),
+        loss='binary_crossentropy',
+        metrics=['binary_accuracy']
+    )
+
+    checkpoint_cb = ModelCheckpoint("mejor_modelo.keras", save_best_only=True, monitor='val_binary_accuracy', mode='max')
+    
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        min_delta=0.001,
+        patience=10,
+        restore_best_weights=True,
+    )
+
+    history = model.fit(
+        ds_train,
+        validation_data=ds_valid,
+        epochs=30,
+        callbacks=[early_stopping, checkpoint_cb],
+    )
+    
+    # Evaluar métricas
+    y_true = []
+    y_pred = []
+    for images, labels in ds_valid:
+        preds = model.predict(images, verbose=0)
+        y_true.extend(labels.numpy())
+        y_pred.extend((preds > 0.5).astype(int).flatten())
+
+    acc = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+    accuracies.append(acc)
+    f1_scores.append(f1)
+    
+    if acc > best_val_acc:
+        best_val_acc = acc
+        best_history = history.history
+
+    with mlflow.start_run(run_name=f"run_{run+1}"):
+        mlflow.log_param("optimizer", "Adam")
+        mlflow.log_param("loss", "binary_crossentropy")
+        mlflow.log_param("batch_size", 64)
+        mlflow.log_param("image_size", (64, 64))
+        mlflow.log_param("run", run + 1)
+        mlflow.log_param("random_seed", 42)
+        mlflow.log_metric("val_accuracy", acc)
+        mlflow.log_metric("val_f1_score", f1)
+        mlflow.tensorflow.log_model(model, f"modelo_cnn_run_{run+1}")
+
+# Guardar métricas para el siguiente notebook
+import pickle
+with open('metrics.pkl', 'wb') as f:
+    pickle.dump({'accuracies': accuracies, 'f1_scores': f1_scores, 'best_val_acc': best_val_acc, 'best_history': best_history}, f)'''  # Insertar aquí el contenido completo del Notebook 2
+        exec(notebook2)
+        "
+        
+    - name: Run Notebook 3 - Evaluation
+      run: |
+        python -c "
+        notebook3 = '''# NOTEBOOK 3
+import pickle
+import pandas as pd
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import mlflow
+
+# Cargar métricas guardadas
+with open('metrics.pkl', 'rb') as f:
+    metrics = pickle.load(f)
+    accuracies = metrics['accuracies']
+    f1_scores = metrics['f1_scores']
+    best_val_acc = metrics['best_val_acc']
+    best_history = metrics['best_history']
+
+print(f"\nPromedio Accuracy: {np.mean(accuracies):.4f}")
+print(f"Promedio F1-score: {np.mean(f1_scores):.4f}")
+
+# Cargar el mejor modelo entrenado
+mejor_modelo = tf.keras.models.load_model("mejor_modelo.keras")
+print("Modelo cargado desde mejor_modelo.keras")
+
+# Visualización de métricas
+history_frame = pd.DataFrame(best_history)
+
+plt.figure(figsize=(10, 4))
+plt.subplot(1, 2, 1)
+plt.plot(history_frame['loss'], label='Entrenamiento')
+plt.plot(history_frame['val_loss'], label='Validación')
+plt.title('Pérdida (mejor modelo)')
+plt.xlabel('Épocas')
+plt.ylabel('Loss')
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history_frame['binary_accuracy'], label='Entrenamiento')
+plt.plot(history_frame['val_binary_accuracy'], label='Validación')
+plt.title('Precisión binaria')
+plt.xlabel('Épocas')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.tight_layout()
+plt.savefig("grafica_mejor_modelo.png")
+plt.show()
+
+# Registrar la gráfica como artefacto en MLflow
+with mlflow.start_run(run_name="registro_mejor_grafica"):
+    mlflow.log_artifact("grafica_mejor_modelo.png", artifact_path="imagenes")'''  # Insertar aquí el contenido completo del Notebook 3
+        exec(notebook3)
+        "
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: ml-artifacts
+        path: |
+          mejor_modelo.keras
+          grafica_mejor_modelo.png
+          metrics.pkl
