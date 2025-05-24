@@ -21,19 +21,23 @@ Conjunto de datos detallados almacenados en una estructura de portafolios donde 
 
 =======================================================================
 
-Decisiones tomadas en el modelado:
+Decisiones tomadas en el modelado: 
 
 Se usaron unicamente 1500 datos de entrenamiento y 500 de prueba
 Se cargan los dataset desde archivos .zip en la nube
 Se usó un modelo clásico de CNN para clasificación binaria de imagenes
 Se usaron capas de pooling (MaxPool2D), BatchNormalization y Dropout para acelerar el proceso y evitar el sobreajuste y capas densas para la clasificación.
+No disminuí las epocas ni las capas por obtener un mejor accuracy.
+
 
 =======================================================================
 Resultados y métricas principales:
-
+tiempo de espera de ejecución: entre 30 y 40 minutos en total
 Promedio Accuracy: 0.6225
 Promedio F1-score: 0.2768
 ![image](https://github.com/user-attachments/assets/3c757e0d-6f2a-487c-833e-790d5b203020)
 
 
+Se puede ejecutar en el siguiente notebook de google colab, no incluí la ejecución secuencial en github:
+https://colab.research.google.com/drive/1cUm09vMRHYhPax6YeE2nLgg_R2D2ax3e?usp=sharing
 
