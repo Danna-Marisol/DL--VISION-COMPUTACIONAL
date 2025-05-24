@@ -32,8 +32,14 @@ No disminuí las epocas ni las capas por obtener un mejor accuracy.
 
 =======================================================================
 Resultados y métricas principales:
-tiempo de espera de ejecución: entre 30 y 40 minutos en total
+
+
+tiempo de espera de ejecución: 
+
+entre 30 y 40 minutos en total
+
 Promedio Accuracy: 0.6225
+
 Promedio F1-score: 0.2768
 ![image](https://github.com/user-attachments/assets/3c757e0d-6f2a-487c-833e-790d5b203020)
 
