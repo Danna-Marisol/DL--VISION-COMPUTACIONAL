@@ -29,5 +29,11 @@ Se usó un modelo clásico de CNN para clasificación binaria de imagenes
 Se usaron capas de pooling (MaxPool2D), BatchNormalization y Dropout para acelerar el proceso y evitar el sobreajuste y capas densas para la clasificación.
 
 =======================================================================
-
 Resultados y métricas principales:
+
+Promedio Accuracy: 0.6225
+Promedio F1-score: 0.2768
+![image](https://github.com/user-attachments/assets/3c757e0d-6f2a-487c-833e-790d5b203020)
+
+
+
